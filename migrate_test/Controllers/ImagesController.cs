@@ -15,107 +15,121 @@ namespace migrate_test.Controllers
     {
         private readonly LDMContext _context;
 
-        public ImagesController(LDMContext context)
+        public ImagesController()
         {
-            _context = context;
         }
 
         // GET: api/Images
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Image>>> GetImage()
+        [HttpGet("{dataset_id}")]
+        public async Task<ActionResult<IEnumerable<Image>>> GetImage(string dataset_id)
         {
-            return await _context.Image.ToListAsync();
+            using (var ldmdb = new LDMContext(dataset_id))
+            {
+                return await ldmdb.Image.ToListAsync();
+            }
         }
 
         // GET: api/Images/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Image>> GetImage(string id)
+        [HttpGet("{dataset_id}/{id}")]
+        public async Task<ActionResult<Image>> GetImage(string dataset_id, string id)
         {
-            var image = await _context.Image.FindAsync(id);
-
-            if (image == null)
+            using (var ldmdb = new LDMContext(dataset_id))
             {
-                return NotFound();
-            }
+                var image = await ldmdb.Image.FindAsync(id);
 
-            return image;
+                if (image == null)
+                {
+                    return NotFound();
+                }
+
+                return image;
+            }
         }
 
         // PUT: api/Images/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutImage(string id, Image image)
+        [HttpPut("{dataset_id}/{id}")]
+        public async Task<IActionResult> PutImage(string dataset_id, string id, Image image)
         {
-            if (id != image.ImageID)
+            using (var ldmdb = new LDMContext(dataset_id))
             {
-                return BadRequest();
-            }
-
-            _context.Entry(image).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!ImageExists(id))
+                if (id != image.ImageID)
                 {
-                    return NotFound();
+                    return BadRequest();
                 }
-                else
-                {
-                    throw;
-                }
-            }
 
-            return NoContent();
+                ldmdb.Entry(image).State = EntityState.Modified;
+
+                try
+                {
+                    await ldmdb.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!ImageExists(ldmdb, id))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+
+                return NoContent();
+            }
         }
 
         // POST: api/Images
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<Image>> PostImage(Image image)
+        [HttpPost("{dataset_id}")]
+        public async Task<ActionResult<Image>> PostImage(string dataset_id, Image image)
         {
-            _context.Image.Add(image);
-            try
+            using (var ldmdb = new LDMContext(dataset_id))
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                if (ImageExists(image.ImageID))
+                ldmdb.Image.Add(image);
+                try
                 {
-                    return Conflict();
+                    await _context.SaveChangesAsync();
                 }
-                else
+                catch (DbUpdateException)
                 {
-                    throw;
+                    if (ImageExists(ldmdb, image.ImageID))
+                    {
+                        return Conflict();
+                    }
+                    else
+                    {
+                        throw;
+                    }
                 }
-            }
 
-            return CreatedAtAction("GetImage", new { id = image.ImageID }, image);
+                return CreatedAtAction("GetImage", new { id = image.ImageID }, image);
+            }
         }
 
         // DELETE: api/Images/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteImage(string id)
+        [HttpDelete("{dataset_id}/{id}")]
+        public async Task<IActionResult> DeleteImage(string dataset_id, string id)
         {
-            var image = await _context.Image.FindAsync(id);
-            if (image == null)
+            using (var ldmdb = new LDMContext(dataset_id))
             {
-                return NotFound();
+                var image = await ldmdb.Image.FindAsync(id);
+                if (image == null)
+                {
+                    return NotFound();
+                }
+
+                ldmdb.Image.Remove(image);
+                await ldmdb.SaveChangesAsync();
+
+                return NoContent();
             }
-
-            _context.Image.Remove(image);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
         }
 
-        private bool ImageExists(string id)
+        private bool ImageExists(LDMContext ldmdb, string id)
         {
-            return _context.Image.Any(e => e.ImageID == id);
+            return ldmdb.Image.Any(e => e.ImageID == id);
         }
     }
 }
