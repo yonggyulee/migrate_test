@@ -1,11 +1,10 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using migrate_test.Models;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using migrate_test.Models;
+using System;
 
 namespace migrate_test.Controllers
 {
@@ -15,93 +14,109 @@ namespace migrate_test.Controllers
     {
         private readonly LDMContext _context;
 
-        public SamplesController(LDMContext context)
+        public SamplesController()
         {
-            _context = context;
         }
 
-        // GET: api/Samples
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Sample>>> GetSample()
+        // GET: api/Samples/dataset_id
+        [HttpGet("{dataset_id}")]
+        public async Task<ActionResult<IEnumerable<Sample>>> GetSample(string dataset_id)
         {
-            return await _context.Sample.ToListAsync();
+            using (var ldmdb = new LDMContext(dataset_id))
+            {
+                return await ldmdb.Sample.ToListAsync();
+            }
         }
 
-        // GET: api/Samples/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Sample>> GetSample(int id)
+        // GET: api/Samples/dataset_id/5
+        [HttpGet("{dataset_id}/{id}")]
+        public async Task<ActionResult<Sample>> GetSample(string dataset_id, int id)
         {
-            var sample = await _context.Sample.FindAsync(id);
-
-            if (sample == null)
+            using (var ldmdb = new LDMContext(dataset_id))
             {
-                return NotFound();
-            }
+                var sample = await ldmdb.Sample.FindAsync(id);
 
-            return sample;
-        }
-
-        // PUT: api/Samples/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutSample(int id, Sample sample)
-        {
-            if (id != sample.SampleID)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(sample).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!SampleExists(id))
+                if (sample == null)
                 {
                     return NotFound();
                 }
-                else
-                {
-                    throw;
-                }
-            }
 
-            return NoContent();
+                return sample;
+            }
         }
 
-        // POST: api/Samples
+        // PUT: api/Samples/dataset_id/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<Sample>> PostSample(Sample sample)
+        [HttpPut("{dataset_id}/{id}")]
+        public async Task<IActionResult> PutSample(string dataset_id, int id, Sample sample)
         {
-            _context.Sample.Add(sample);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetSample", new { id = sample.SampleID }, sample);
-        }
-
-        // DELETE: api/Samples/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteSample(int id)
-        {
-            var sample = await _context.Sample.FindAsync(id);
-            if (sample == null)
+            using (var ldmdb = new LDMContext(dataset_id))
             {
-                return NotFound();
+                if (id != sample.SampleID)
+                {
+                    return BadRequest();
+                }
+
+                ldmdb.Entry(sample).State = EntityState.Modified;
+
+                try
+                {
+                    await ldmdb.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!SampleExists(ldmdb, id))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+
+                return NoContent();
             }
-
-            _context.Sample.Remove(sample);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
         }
 
-        private bool SampleExists(int id)
+        // POST: api/Samples/dataset_id
+        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [HttpPost("{dataset_id}")]
+        public async Task<ActionResult<Sample>> PostSample(string dataset_id, Sample sample)
         {
-            return _context.Sample.Any(e => e.SampleID == id);
+            using (var ldmdb = new LDMContext(dataset_id))
+            {
+                Console.WriteLine($"SAMPLE POST ADD : {dataset_id} - {sample.SampleID}");
+                ldmdb.Sample.Add(sample);
+                Console.WriteLine($"SAMPLE POST SAVE : {dataset_id} - {sample.SampleID}");
+                await ldmdb.SaveChangesAsync();
+
+                return CreatedAtAction("GetSample", new { dataset_id = dataset_id, id = sample.SampleID }, sample);
+            }
+        }
+
+        // DELETE: api/Samples/dataset_id/5
+        [HttpDelete("{dataset_id}/{id}")]
+        public async Task<IActionResult> DeleteSample(string dataset_id, int id)
+        {
+            using (var ldmdb = new LDMContext(dataset_id))
+            {
+                var sample = await ldmdb.Sample.FindAsync(id);
+                if (sample == null)
+                {
+                    return NotFound();
+                }
+
+                ldmdb.Sample.Remove(sample);
+                await ldmdb.SaveChangesAsync();
+
+                return NoContent();
+            }
+        }
+
+        private bool SampleExists(LDMContext ldmdb, int id)
+        {
+            return ldmdb.Sample.Any(e => e.SampleID == id);
         }
     }
 }

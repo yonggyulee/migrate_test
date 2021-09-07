@@ -1,9 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Microsoft.EntityFrameworkCore;
+using System;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
 
 namespace migrate_test.Models
 {
@@ -11,7 +8,7 @@ namespace migrate_test.Models
     {
         private string DbFileName = "ldm.db";
         public string DbPath { get; private set; }
-        public LDMContext(string ds_id = "Dataset_1")
+        public LDMContext(string ds_id = "dataset_1")
         {
             DbPath = GetDbPath(ds_id);
             DirectoryInfo dataset = new DirectoryInfo(DbPath);
