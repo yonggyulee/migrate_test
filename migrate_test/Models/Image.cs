@@ -9,7 +9,6 @@ namespace migrate_test.Models
         [Column("IMAGE_ID")]
         public string ImageID { get; set; }
 
-        [ForeignKey("FK_Sample")]
         [Column("SAMPLE_ID")]
         public int SampleID { get; set; }
 
@@ -25,5 +24,8 @@ namespace migrate_test.Models
 
         [Column("IMAGE_SCHEMA")]
         public string ImageScheme { get; set; }
+
+        [ForeignKey("SampleID")]
+        public Sample Sample { get; set; }
     }
 }

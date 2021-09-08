@@ -20,11 +20,31 @@ namespace migrate_test.Controllers
 
         // GET: api/Samples/dataset_id
         [HttpGet("{dataset_id}")]
-        public async Task<ActionResult<IEnumerable<Sample>>> GetSample(string dataset_id)
+        public async Task<ActionResult<Object>> GetSample(string dataset_id)
         {
             using (var ldmdb = new LDMContext(dataset_id))
             {
-                return await ldmdb.Sample.ToListAsync();
+                return await ldmdb
+                            .Sample
+                            .Select(s => new
+                            {
+                                s.SampleID,
+                                s.DatasetID,
+                                s.SampleType,
+                                s.Metadata,
+                                s.ImageCount,
+                                Images = s.Images.Select(i =>
+                                                    new
+                                                    {
+                                                        i.ImageID,
+                                                        i.SampleID,
+                                                        i.ImageNO,
+                                                        i.ImageCode,
+                                                        i.OriginalFilename,
+                                                        i.ImageScheme
+                                                    }).ToList()
+                            }).ToListAsync();
+                
             }
         }
 
