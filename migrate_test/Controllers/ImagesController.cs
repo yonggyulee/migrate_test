@@ -16,16 +16,15 @@ namespace migrate_test.Controllers
     public class ImagesController : ControllerBase
     {
 
-        public ImagesController()
-        {
-        }
+        public ImagesController() { }
 
         // GET: api/Images/dataset_id
+        // 전체 이미지 정보 조회
         [HttpGet("{dataset_id}")]
         public async Task<ActionResult<Object>> GetImage(string dataset_id)
         {
             using (var ldmdb = new LDMContext(dataset_id))
-            {
+            {                
                 return await ldmdb
                             .Image
                             .Select(i => new
@@ -50,12 +49,12 @@ namespace migrate_test.Controllers
         }
 
         // GET: api/Images/dataset_id/5
+        // 이미지 아이디로 해당 이미지 정보 조회
         [HttpGet("{dataset_id}/{id}")]
         public async Task<Object> GetImage(string dataset_id, string id)
         {
             using (var ldmdb = new LDMContext(dataset_id))
             {
-                Console.WriteLine($"GetImage(id) : {id}");
                 var image = await ldmdb
                                 .Image
                                 .Select(i => new
@@ -75,10 +74,9 @@ namespace migrate_test.Controllers
                                         i.Sample.ImageCount
                                     }
                                 })
-                                .Where(i => i.ImageID == id)
+                                .Where(i => i.ImageID == id)            // WHERE 절
                                 .FirstAsync();
 
-                Console.WriteLine($"GetImage(id) END : {id}");
                 if (image == null)
                 {
                     return NotFound();
@@ -90,6 +88,7 @@ namespace migrate_test.Controllers
 
         // PUT: api/Images/dataset_id/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        // 이미지 정보 수정
         [HttpPut("{dataset_id}/{id}")]
         public async Task<IActionResult> PutImage(string dataset_id, string id, Image image)
         {
@@ -104,13 +103,13 @@ namespace migrate_test.Controllers
 
                 try
                 {
-                    await ldmdb.SaveChangesAsync();
+                    await ldmdb.SaveChangesAsync();             // 수정한 데이터를 데이터베이스에 적용
                 }
                 catch (DbUpdateConcurrencyException)
                 {
-                    if (!ImageExists(ldmdb, id))
+                    if (!ImageExists(ldmdb, id))                // id와 일치하는 이미지 데이터가 없을 경우
                     {
-                        return NotFound();
+                        return NotFound();                      // NotFound
                     }
                     else
                     {
@@ -124,23 +123,27 @@ namespace migrate_test.Controllers
 
         // POST: api/Images/dataset_id
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        // 이미지 정보 입력
         [HttpPost("{dataset_id}")]
         public async Task<ActionResult<Image>> PostImage(string dataset_id, Image image)
         {
             using (var ldmdb = new LDMContext(dataset_id))
             {
+                // 입력한 이미지 정보의 SampleID와 일치하는 Sample DbSet을 DbContext로 부터 조회.
                 var sample = ldmdb.Sample.Include(b => b.Images).Where(s => s.SampleID == image.SampleID).First();
                 Console.WriteLine($"POSTIMAGE FIND : {sample.SampleID}");
 
                 Console.WriteLine($"POSTIMAGE sample add image : {image}");
+                // 해당 Sample Dbset의 images 리스트에 image를 추가
                 sample.Images.Add(image);
+                // imageCount를 images의 개수로 갱신
                 sample.ImageCount = sample.Images.Count;
 
                 Console.WriteLine($"POSTIMAGE SAVE : {sample.SampleID}, {image.ImageID}");
 
                 try
                 {
-                    await ldmdb.SaveChangesAsync();
+                    await ldmdb.SaveChangesAsync();                 // 수행한 작업을 데이터베이스에 적용
                     Console.WriteLine($"POSTIMAGE SAVE COMPLETE : {sample.SampleID}, {image.ImageID}");
                 }
                 catch (DbUpdateException)
@@ -155,6 +158,7 @@ namespace migrate_test.Controllers
                     }
                 }
 
+                // 입력한 결과를 GetImage 메소드 형식에 맞춰 출력
                 return CreatedAtAction("GetImage", new { dataset_id = dataset_id, id = image.ImageID }, new
                 {
                     image.ImageID,
@@ -176,20 +180,24 @@ namespace migrate_test.Controllers
         }
 
         // DELETE: api/Images/5
+        // 이미지 삭제
         [HttpDelete("{dataset_id}/{id}")]
         public async Task<IActionResult> DeleteImage(string dataset_id, string id)
         {
             using (var ldmdb = new LDMContext(dataset_id))
             {
+                // id로 이미지 조회
                 var image = await ldmdb.Image.FindAsync(id);
-                if (image == null)
+                if (image == null)          // 일치하는 이미지가 없을 경우
                 {
-                    return NotFound();
+                    return NotFound();      // NotFound
                 }
 
+                // 이미지의 SampleID에 해당하는 Sample DbSet을 조회하여 ImageCount를 감소시킴.
                 var sample = ldmdb.Sample.Find(image.SampleID);
                 sample.ImageCount -= 1;
 
+                // 데이터 베이스에서 이미지 정보 삭제
                 ldmdb.Image.Remove(image);
                 await ldmdb.SaveChangesAsync();
 
@@ -198,26 +206,31 @@ namespace migrate_test.Controllers
         }
 
         // POST:
+        // 이미지 정보와 함께 이미지 파일 업로드
         [HttpPost("{dataset_id}/upload")]
         public async Task<Object> UploadImage(string dataset_id, [FromForm]Image image)
         {
             using (var ldmdb = new LDMContext(dataset_id))
             {
+                // 입력한 이미지 정보의 SampleID와 일치하는 Sample DbSet을 DbContext로 부터 조회.
                 var sample = ldmdb.Sample.Include(b => b.Images).Where(s => s.SampleID == image.SampleID).First();
                 Console.WriteLine($"POSTIMAGE FIND : {sample.SampleID}");
 
                 Console.WriteLine($"POSTIMAGE sample add image : {image}");
+                // 해당 Sample Dbset의 images 리스트에 image를 추가
                 sample.Images.Add(image);
+                // imageCount를 images의 개수로 갱신
                 sample.ImageCount = sample.Images.Count;
 
                 Console.WriteLine($"POSTIMAGE SAVE : {sample.SampleID}, {image.ImageID}");
-
+                // 이미지 파일을 저장할 폴더 경로
                 string current_path = Environment.CurrentDirectory + $"\\database\\{dataset_id}\\images";
-
+                
                 var path = Path.Combine(current_path, image.ImageID);
 
                 try
                 {
+                    // 파일 저장
                     saveFile(image.ImageFile, path);
                 }
                 catch(IOException)
@@ -234,7 +247,8 @@ namespace migrate_test.Controllers
                 {
                     if (ImageExists(ldmdb, image.ImageID))
                     {
-                        removeFile(path);
+                        // 데이터 베이스 저장 실패 시 파일 삭제
+                        removeFile(path);                   
                         return Conflict();
                     }
                     else
@@ -264,17 +278,21 @@ namespace migrate_test.Controllers
         }
 
         // GET:
+        // 이미지 파일 다운로드
         [HttpGet("{dataset_id}/download/{id}")]
         public async Task<IActionResult> DownloadImage(string dataset_id, string id)
         {
             using (var ldmdb = new LDMContext(dataset_id))
             {
+                // 이미지 조회
                 var image = await ldmdb.Image.FindAsync(id);
 
+                // 이미지 파일 경로
                 string current_path = Environment.CurrentDirectory + $"\\database\\{dataset_id}\\images";
 
                 var path = Path.Combine(current_path, image.ImageID);
 
+                // 파일 반환
                 return await GetFile(path);
             }
         }
