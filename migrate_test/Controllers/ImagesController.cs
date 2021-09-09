@@ -199,7 +199,17 @@ namespace migrate_test.Controllers
 
                 // 데이터 베이스에서 이미지 정보 삭제
                 ldmdb.Image.Remove(image);
+
+                string current_path = Environment.CurrentDirectory + $"\\database\\{dataset_id}\\images";
+
+                var verified_path = pathToVerifiedPath(Path.Combine(current_path, image.ImageID));
+
+                removeFile(verified_path);
+
                 await ldmdb.SaveChangesAsync();
+
+
+
 
                 return NoContent();
             }
@@ -226,12 +236,12 @@ namespace migrate_test.Controllers
                 // 이미지 파일을 저장할 폴더 경로
                 string current_path = Environment.CurrentDirectory + $"\\database\\{dataset_id}\\images";
                 
-                var path = Path.Combine(current_path, image.ImageID);
+                var verified_path = pathToVerifiedPath(Path.Combine(current_path, image.ImageID));
 
                 try
                 {
                     // 파일 저장
-                    saveFile(image.ImageFile, path);
+                    saveFile(image.ImageFile, verified_path);
                 }
                 catch(IOException)
                 {
@@ -243,12 +253,10 @@ namespace migrate_test.Controllers
                     await ldmdb.SaveChangesAsync();
                     Console.WriteLine($"POSTIMAGE SAVE COMPLETE : {sample.SampleID}, {image.ImageID}");
                 }
-                catch (DbUpdateException)
+                catch (Exception)
                 {
                     if (ImageExists(ldmdb, image.ImageID))
-                    {
-                        // 데이터 베이스 저장 실패 시 파일 삭제
-                        removeFile(path);                   
+                    {                
                         return Conflict();
                     }
                     else
@@ -290,10 +298,10 @@ namespace migrate_test.Controllers
                 // 이미지 파일 경로
                 string current_path = Environment.CurrentDirectory + $"\\database\\{dataset_id}\\images";
 
-                var path = Path.Combine(current_path, image.ImageID);
+                var verified_path = pathToVerifiedPath(Path.Combine(current_path, image.ImageID));
 
                 // 파일 반환
-                return await GetFile(path);
+                return await GetFile(verified_path);
             }
         }
         
@@ -302,29 +310,19 @@ namespace migrate_test.Controllers
             return ldmdb.Image.Any(e => e.ImageID == id);
         }
 
-        private Object ImageToResponseType(Image img)
-        {
-            return new
-            {
-                img.ImageID,
-                img.SampleID,
-                img.ImageNO,
-                img.ImageCode,
-                img.OriginalFilename,
-                img.ImageScheme,
-                Sample = new
-                {
-                    img.Sample.SampleID,
-                    img.Sample.DatasetID,
-                    img.Sample.SampleType,
-                    img.Sample.Metadata,
-                    img.Sample.ImageCount
-                }
-            };
-        }
-
         private async void saveFile(IFormFile file, string path)
         {
+            // 경로 검증
+            Console.WriteLine($"Path : {path}");
+            string folder_path = path.Substring(0, path.LastIndexOf('\\'));
+            Console.WriteLine($"FolderPath : {folder_path}");
+
+            DirectoryInfo di = new DirectoryInfo(folder_path);
+            if (di.Exists == false)
+            {
+                di.Create();
+            }
+
             if (file.Length > 0)
             {
                 using (var fileStream = new FileStream(path, FileMode.Create))
@@ -370,6 +368,11 @@ namespace migrate_test.Controllers
                 }
             }
             return NotFound();
+        }
+
+        private string pathToVerifiedPath(string path)
+        {
+            return path.Replace('/', '\\');
         }
     }
 }
