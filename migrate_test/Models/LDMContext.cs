@@ -42,5 +42,11 @@ namespace migrate_test.Models
 
             return database_path;
         }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Sample>().HasMany(s => s.Images).WithOne(i => i.Sample);
+        }
+
     }
 }
