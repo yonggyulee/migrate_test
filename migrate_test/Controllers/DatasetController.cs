@@ -60,7 +60,7 @@ namespace migrate_test.Controllers
                 
                 // 기존에 Migration한 데이터베이스 정보를 db 파일에 적용.
                 // id 위치에 db 파일이 없을 시 migrate하여 db 파일 생성. 
-                await ldmdb.GetInfrastructure().GetService<IMigrator>().MigrateAsync("Database_v5");
+                await ldmdb.GetInfrastructure().GetService<IMigrator>().MigrateAsync("Database_v6");
                 // 가장 최근에 적용된 Migration을 반환.
                 var lastAppliedMigration = (await ldmdb.Database.GetAppliedMigrationsAsync()).Last();
 

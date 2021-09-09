@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Microsoft.AspNetCore.Http;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace migrate_test.Models
@@ -27,5 +28,8 @@ namespace migrate_test.Models
 
         [ForeignKey("SampleID")]
         public Sample Sample { get; set; }
+
+        [NotMapped]
+        public IFormFile ImageFile { get; set; }
     }
 }

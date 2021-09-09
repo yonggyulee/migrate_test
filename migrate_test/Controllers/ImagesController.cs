@@ -6,6 +6,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using System;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using System.IO;
 
 namespace migrate_test.Controllers
 {
@@ -127,19 +129,12 @@ namespace migrate_test.Controllers
         {
             using (var ldmdb = new LDMContext(dataset_id))
             {
-                //var sample = ldmdb.Sample.Find(image.SampleID);
                 var sample = ldmdb.Sample.Include(b => b.Images).Where(s => s.SampleID == image.SampleID).First();
                 Console.WriteLine($"POSTIMAGE FIND : {sample.SampleID}");
 
                 Console.WriteLine($"POSTIMAGE sample add image : {image}");
                 sample.Images.Add(image);
                 sample.ImageCount = sample.Images.Count;
-                
-                //Console.WriteLine($"POSTIMAGE ADD IMAGE : {image.ImageID}");
-                //ldmdb.Image.Add(image);
-
-                //Console.WriteLine($"POSTIMAGE MODIFY SAMPLE : {sample}");
-                //ldmdb.Entry(sample).State = EntityState.Modified;
 
                 Console.WriteLine($"POSTIMAGE SAVE : {sample.SampleID}, {image.ImageID}");
 
@@ -158,10 +153,6 @@ namespace migrate_test.Controllers
                     {
                         throw;
                     }
-                }
-                catch (JsonException)
-                {
-                    Console.WriteLine("JSONEXCEPTION 발생");
                 }
 
                 return CreatedAtAction("GetImage", new { dataset_id = dataset_id, id = image.ImageID }, new
@@ -206,24 +197,88 @@ namespace migrate_test.Controllers
             }
         }
 
-        // GET:
-        [HttpGet("{dataset_id}/{sample_id}/img={id}")]
-        public async Task<Object> GetImageView(string dataset_id, int sample_id, string id)
+        // POST:
+        [HttpPost("{dataset_id}/upload")]
+        public async Task<Object> UploadImage(string dataset_id, [FromForm]Image image)
         {
-            using(var ldmdb = new LDMContext(dataset_id))
+            using (var ldmdb = new LDMContext(dataset_id))
             {
-                var image = await ldmdb.Image.Where(i => (i.SampleID == sample_id && i.ImageID == id)).FirstAsync();
-                if (image == null)
+                var sample = ldmdb.Sample.Include(b => b.Images).Where(s => s.SampleID == image.SampleID).First();
+                Console.WriteLine($"POSTIMAGE FIND : {sample.SampleID}");
+
+                Console.WriteLine($"POSTIMAGE sample add image : {image}");
+                sample.Images.Add(image);
+                sample.ImageCount = sample.Images.Count;
+
+                Console.WriteLine($"POSTIMAGE SAVE : {sample.SampleID}, {image.ImageID}");
+
+                string current_path = Environment.CurrentDirectory + $"\\database\\{dataset_id}\\images";
+
+                var path = Path.Combine(current_path, image.ImageID);
+
+                try
                 {
-                    return NotFound();
+                    saveFile(image.ImageFile, path);
+                }
+                catch(IOException)
+                {
+                    return Conflict();
                 }
 
+                try
+                {
+                    await ldmdb.SaveChangesAsync();
+                    Console.WriteLine($"POSTIMAGE SAVE COMPLETE : {sample.SampleID}, {image.ImageID}");
+                }
+                catch (DbUpdateException)
+                {
+                    if (ImageExists(ldmdb, image.ImageID))
+                    {
+                        removeFile(path);
+                        return Conflict();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
 
-
-                return NoContent();
+                return CreatedAtAction("GetImage", new { dataset_id = dataset_id, id = image.ImageID }, new
+                {
+                    image.ImageID,
+                    image.SampleID,
+                    image.ImageNO,
+                    image.ImageCode,
+                    image.OriginalFilename,
+                    image.ImageScheme,
+                    Sample = new
+                    {
+                        image.Sample.SampleID,
+                        image.Sample.DatasetID,
+                        image.Sample.SampleType,
+                        image.Sample.Metadata,
+                        image.Sample.ImageCount
+                    }
+                });
             }
         }
 
+        // GET:
+        [HttpGet("{dataset_id}/download/{id}")]
+        public async Task<IActionResult> DownloadImage(string dataset_id, string id)
+        {
+            using (var ldmdb = new LDMContext(dataset_id))
+            {
+                var image = await ldmdb.Image.FindAsync(id);
+
+                string current_path = Environment.CurrentDirectory + $"\\database\\{dataset_id}\\images";
+
+                var path = Path.Combine(current_path, image.ImageID);
+
+                return await GetFile(path);
+            }
+        }
+        
         private bool ImageExists(LDMContext ldmdb, string id)
         {
             return ldmdb.Image.Any(e => e.ImageID == id);
@@ -248,6 +303,55 @@ namespace migrate_test.Controllers
                     img.Sample.ImageCount
                 }
             };
+        }
+
+        private async void saveFile(IFormFile file, string path)
+        {
+            if (file.Length > 0)
+            {
+                using (var fileStream = new FileStream(path, FileMode.Create))
+                {
+                    await file.CopyToAsync(fileStream);
+                }
+            }
+        }
+
+        private bool removeFile(string path)
+        {
+            if (System.IO.File.Exists(path))
+            {
+                try
+                {
+                    System.IO.File.Delete(path);
+                }
+                catch (IOException)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private async Task<IActionResult> GetFile(string path)
+        {
+            if (System.IO.File.Exists(path))
+            {
+                byte[] bytes;
+                using (FileStream file = new FileStream(path, FileMode.Open))
+                {
+                    try
+                    {
+                        bytes = new byte[file.Length];
+                        await file.ReadAsync(bytes);
+
+                        return File(bytes, "application/octet-stream");
+                    }catch(Exception)
+                    {
+                        return StatusCode(StatusCodes.Status500InternalServerError);
+                    }
+                }
+            }
+            return NotFound();
         }
     }
 }
