@@ -5,6 +5,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System;
+using System.IO;
+using System.Text;
+using System.Text.Json;
+using Newtonsoft.Json;
+using migrate_test.Controllers.Utils;
 
 namespace migrate_test.Controllers
 {
@@ -12,10 +17,11 @@ namespace migrate_test.Controllers
     [ApiController]
     public class SamplesController : ControllerBase
     {
-        private readonly LDMContext _context;
+        private IgnorePropertiesResolver IPResolver;
 
         public SamplesController()
         {
+            IPResolver = new IgnorePropertiesResolver(new[] { "Metadata", "Sample", "ImageFile"});
         }
 
         // GET: api/Samples/dataset_id
@@ -106,12 +112,38 @@ namespace migrate_test.Controllers
         {
             using (var ldmdb = new LDMContext(dataset_id))
             {
+                sample.DatasetID = dataset_id;
+                string body = JsonConvert.SerializeObject(
+                                        sample,
+                                        new JsonSerializerSettings() { 
+                                            ContractResolver = IPResolver
+                                        });
+                
+                Console.WriteLine($"SAMPLE POST {dataset_id} : {body}");
+                sample.Metadata = body;
                 Console.WriteLine($"SAMPLE POST ADD : {dataset_id} - {sample.SampleID}");
                 ldmdb.Sample.Add(sample);
                 Console.WriteLine($"SAMPLE POST SAVE : {dataset_id} - {sample.SampleID}");
                 await ldmdb.SaveChangesAsync();
 
-                return CreatedAtAction("GetSample", new { dataset_id = dataset_id, id = sample.SampleID }, sample);
+                return CreatedAtAction("GetSample", new { dataset_id = dataset_id, id = sample.SampleID }, new
+                {
+                    sample.SampleID,
+                    sample.DatasetID,
+                    sample.SampleType,
+                    sample.Metadata,
+                    sample.ImageCount,
+                    Images = sample.Images.Select(i =>
+                                                    new
+                                                    {
+                                                        i.ImageID,
+                                                        i.SampleID,
+                                                        i.ImageNO,
+                                                        i.ImageCode,
+                                                        i.OriginalFilename,
+                                                        i.ImageScheme
+                                                    }).ToList()
+                });
             }
         }
 

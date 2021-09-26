@@ -21,5 +21,10 @@ namespace migrate_test.Models
         public int ImageCount { get; set; }
 
         public ICollection<Image> Images { get; set; } = new List<Image>();
+
+        public bool ShouldSerializeMetadata()
+        {
+            return !String.IsNullOrWhiteSpace(this.Metadata);
+        }
     }
 }

@@ -8,6 +8,8 @@ using System;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using System.IO;
+using Newtonsoft.Json;
+using migrate_test.Controllers.Utils;
 
 namespace migrate_test.Controllers
 {
@@ -15,8 +17,12 @@ namespace migrate_test.Controllers
     [ApiController]
     public class ImagesController : ControllerBase
     {
+        private IgnorePropertiesResolver IPResolver; 
 
-        public ImagesController() { }
+        public ImagesController() 
+        {
+            IPResolver = new IgnorePropertiesResolver(new[] { "Metadata", "ImageFile", "Sample" });
+        }
 
         // GET: api/Images/dataset_id
         // 전체 이미지 정보 조회
@@ -48,9 +54,40 @@ namespace migrate_test.Controllers
             }
         }
 
+        // GET: api/Images/dataset_id
+        // Sample_id로 이미지 정보 조회
+        [HttpGet("{dataset_id}/sample={sample_id}")]
+        public async Task<ActionResult<Object>> GetImage(string dataset_id, int sample_id)
+        {
+            using (var ldmdb = new LDMContext(dataset_id))
+            {
+                return await ldmdb
+                            .Image
+                            .Select(i => new
+                            {
+                                i.ImageID,
+                                i.SampleID,
+                                i.ImageNO,
+                                i.ImageCode,
+                                i.OriginalFilename,
+                                i.ImageScheme,
+                                Sample = new
+                                {
+                                    i.Sample.SampleID,
+                                    i.Sample.DatasetID,
+                                    i.Sample.SampleType,
+                                    i.Sample.Metadata,
+                                    i.Sample.ImageCount
+                                }
+                            })
+                            .Where(i => i.SampleID == sample_id)
+                            .ToListAsync();
+            }
+        }
+
         // GET: api/Images/dataset_id/5
         // 이미지 아이디로 해당 이미지 정보 조회
-        [HttpGet("{dataset_id}/{id}")]
+        [HttpGet("{dataset_id}/image={id}")]
         public async Task<Object> GetImage(string dataset_id, string id)
         {
             using (var ldmdb = new LDMContext(dataset_id))
@@ -138,6 +175,9 @@ namespace migrate_test.Controllers
                 sample.Images.Add(image);
                 // imageCount를 images의 개수로 갱신
                 sample.ImageCount = sample.Images.Count;
+                // Metadata 갱신
+                sample.Metadata = GetChangedMetadata(sample);
+                Console.WriteLine($"POSTIMAGE sample.Metadata : {sample.Metadata}");
 
                 Console.WriteLine($"POSTIMAGE SAVE : {sample.SampleID}, {image.ImageID}");
 
@@ -196,6 +236,9 @@ namespace migrate_test.Controllers
                 // 이미지의 SampleID에 해당하는 Sample DbSet을 조회하여 ImageCount를 감소시킴.
                 var sample = ldmdb.Sample.Find(image.SampleID);
                 sample.ImageCount -= 1;
+                // Metadata 갱신
+                sample.Metadata = GetChangedMetadata(sample);
+                Console.WriteLine($"DELETEIMAGE sample.Metadata : {sample.Metadata}");
 
                 // 데이터 베이스에서 이미지 정보 삭제
                 ldmdb.Image.Remove(image);
@@ -222,6 +265,31 @@ namespace migrate_test.Controllers
         {
             using (var ldmdb = new LDMContext(dataset_id))
             {
+                //Console.WriteLine("UPLOADIMAGE");
+                //Console.WriteLine($"{image.ImageID}");
+                //Console.WriteLine($"{image.ImageNO}");
+                //Console.WriteLine($"{image.ImageCode}");
+                //Console.WriteLine($"{image.ImageScheme}");
+                //Console.WriteLine($"{image.OriginalFilename}");
+                //Console.WriteLine($"ImageFile :: ");
+                //if(image.ImageFile == null)
+                //{
+                //    Console.WriteLine("ImageFile is null");
+                //}
+
+                //string test_path = "D:\\LocalDatasetManagement\\savedata\\images";
+                //var verified_path = pathToVerifiedPath(Path.Combine(test_path, image.ImageID));
+                //saveFile(image.ImageFile, verified_path);
+
+                //return new
+                //{
+                //    image.ImageID,
+                //    image.SampleID,
+                //    image.ImageNO,
+                //    image.ImageCode,
+                //    image.OriginalFilename,
+                //    image.ImageScheme
+                //};
                 // 입력한 이미지 정보의 SampleID와 일치하는 Sample DbSet을 DbContext로 부터 조회.
                 var sample = ldmdb.Sample.Include(b => b.Images).Where(s => s.SampleID == image.SampleID).First();
                 Console.WriteLine($"POSTIMAGE FIND : {sample.SampleID}");
@@ -231,21 +299,27 @@ namespace migrate_test.Controllers
                 sample.Images.Add(image);
                 // imageCount를 images의 개수로 갱신
                 sample.ImageCount = sample.Images.Count;
+                // Metadata 갱신
+                sample.Metadata = GetChangedMetadata(sample);
+                Console.WriteLine($"POSTIMAGE sample.Metadata : {sample.Metadata}");
 
-                Console.WriteLine($"POSTIMAGE SAVE : {sample.SampleID}, {image.ImageID}");
-                // 이미지 파일을 저장할 폴더 경로
-                string current_path = Environment.CurrentDirectory + $"\\database\\{dataset_id}\\images";
-                
-                var verified_path = pathToVerifiedPath(Path.Combine(current_path, image.ImageID));
+                if(image.ImageFile != null)
+                {
+                    Console.WriteLine($"POSTIMAGE SAVE : {sample.SampleID}, {image.ImageID}");
+                    // 이미지 파일을 저장할 폴더 경로
+                    string current_path = Environment.CurrentDirectory + $"\\database\\{dataset_id}\\images";
 
-                try
-                {
-                    // 파일 저장
-                    saveFile(image.ImageFile, verified_path);
-                }
-                catch(IOException)
-                {
-                    return Conflict();
+                    var verified_path = pathToVerifiedPath(Path.Combine(current_path, image.ImageID));
+
+                    try
+                    {
+                        // 파일 저장
+                        saveFile(image.ImageFile, verified_path);
+                    }
+                    catch (IOException)
+                    {
+                        return Conflict();
+                    }
                 }
 
                 try
@@ -256,7 +330,7 @@ namespace migrate_test.Controllers
                 catch (Exception)
                 {
                     if (ImageExists(ldmdb, image.ImageID))
-                    {                
+                    {
                         return Conflict();
                     }
                     else
@@ -285,21 +359,62 @@ namespace migrate_test.Controllers
             }
         }
 
+        // POST:
+        // 이미지 파일 업로드
+        [HttpPost("{dataset_id}/upload/{id}")]
+        public async Task<Object> UploadImageFile(string dataset_id, string id, IFormFile imageFile)
+        {
+            var verified_id = idToVerifiedID(id);
+            Console.WriteLine($"UPLOADIMAGEFILE : {verified_id}");
+            if (imageFile == null)
+            {
+                Console.WriteLine("ImageFile is null");
+                return NotFound("imageFile is null");
+            }
+
+            if (imageFile != null)
+            {
+                Console.WriteLine($"IMAGEFILE SAVE : {verified_id}");
+                // 이미지 파일을 저장할 폴더 경로
+                string current_path = Environment.CurrentDirectory + $"\\database\\{dataset_id}\\images";
+
+                var verified_path = pathToVerifiedPath(Path.Combine(current_path, verified_id));
+
+                try
+                {
+                    // 파일 저장
+                    saveFile(imageFile, verified_path);
+                }
+                catch (IOException)
+                {
+                    Conflict();
+                }
+            }
+            
+            return Content("Success");
+        }
+
         // GET:
         // 이미지 파일 다운로드
-        [HttpGet("{dataset_id}/download/{id}")]
+        [HttpGet("{dataset_id}/file/image={id}")]
         public async Task<IActionResult> DownloadImage(string dataset_id, string id)
         {
             using (var ldmdb = new LDMContext(dataset_id))
             {
+                Console.WriteLine($"DownloadImage : {dataset_id} {id}");
                 // 이미지 조회
-                var image = await ldmdb.Image.FindAsync(id);
+                string verified_id = idToVerifiedID(id);
+                Console.WriteLine($"DownloadImage : {dataset_id} {verified_id}");
+                var image = await ldmdb.Image.FindAsync(verified_id);
+                Console.WriteLine($"DownloadImage Find Success : {dataset_id} {verified_id} {image.ImageID}");
+
 
                 // 이미지 파일 경로
                 string current_path = Environment.CurrentDirectory + $"\\database\\{dataset_id}\\images";
 
                 var verified_path = pathToVerifiedPath(Path.Combine(current_path, image.ImageID));
 
+                Console.WriteLine($"DownloadImage Verified_path : {verified_path}");
                 // 파일 반환
                 return await GetFile(verified_path);
             }
@@ -373,6 +488,24 @@ namespace migrate_test.Controllers
         private string pathToVerifiedPath(string path)
         {
             return path.Replace('/', '\\');
+        }
+
+        private string idToVerifiedID(string id)
+        {
+            return id.Replace("%2F", "/");
+        }
+
+        private string GetChangedMetadata(Sample sample)
+        {
+            //if (sample.Metadata != null)
+            //    sample.Metadata = null;
+
+            return JsonConvert.SerializeObject(
+                            sample,
+                            new JsonSerializerSettings()
+                            {
+                                ContractResolver = IPResolver
+                            });
         }
     }
 }
